@@ -13,7 +13,7 @@ A robust Python command-line tool designed to reconnoiter a webpage, extract dow
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/your-username/CliDownloader.git
+   git clone https://github.com/punkcake21/CliDownloader.git
    cd CliDownloader
    ```
 
@@ -27,7 +27,7 @@ A robust Python command-line tool designed to reconnoiter a webpage, extract dow
 Run the script using Python:
 
 ```bash
-python CliDownloader2.py
+python CliDownloader.py
 ```
 
 Follow the on-screen prompts:
