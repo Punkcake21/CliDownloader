@@ -40,64 +40,68 @@ def check_and_install_dependencies():
         print("[-] 'pip' command not found. Ensure python and pip are configured correctly.")
         sys.exit(1)
 
-import requests
-import re
-from tqdm import tqdm 
-from bs4 import BeautifulSoup, XMLParsedAsHTMLWarning
-from urllib.parse import urljoin, urlparse
 
-# Suppress BeautifulSoup XML-as-HTML warnings for mixed pages
-warnings.filterwarnings("ignore", category=XMLParsedAsHTMLWarning)
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (ReconCrawler/1.0)"
+}
 
 def is_same_domain(url1, url2):
-    """Checks if two URLs belong to the same domain."""
-    domain1 = urlparse(url1).netloc
-    domain2 = urlparse(url2).netloc
-    return domain1 == domain2
+    d1 = urlparse(url1).netloc.lower().lstrip("www.")
+    d2 = urlparse(url2).netloc.lower().lstrip("www.")
+    return d1 == d2 or d1.endswith("." + d2)
 
-def start_crawler(start_url, max_depth=1):
-    """crawls the website starting from start_url up to max_depth."""
-    to_visit = {start_url}
+def start_crawler(start_url, max_depth=2, max_pages=100):
     visited = set()
-    all_download_links = []
-    initial_domain = urlparse(start_url).netloc
+    downloads = []
+    seen_download_urls = set()
 
-    current_depth = 0
+    queue = deque()
+    queue.append((start_url, 0))
 
     pages_crawled = 0
-    while to_visit and current_depth < max_depth and pages_crawled < MAX_PAGES:
-        current_depth += 1
-        next_to_visit = set()
 
-        for url in to_visit:
-            if url in visited or pages_crawled >= MAX_PAGES:
-                continue
+    while queue and pages_crawled < max_pages:
+        current_url, depth = queue.popleft()
 
-            logging.debug("Crawling: %s (Depth: %d)", url, current_depth)
-            pages_crawled += 1
-            if pages_crawled % 10 == 0:
-                logging.info("[*] Crawled %d pages...", pages_crawled)
+        if current_url in visited:
+            continue
 
-            soup, base_url = fetch_and_parse(url)
-            visited.add(url)
+        if depth > max_depth:
+            continue
 
-            if not soup:
-                continue
+        logging.info("Crawling (%d/%d): %s", pages_crawled + 1, max_pages, current_url)
 
-            all_links = extract_all_links(soup, base_url)
-            current_downloads = filter_download_links(all_links)
-            
-            # deduplicate by URL
-            all_download_links.extend(current_downloads)
+        soup, base_url = fetch_and_parse(current_url)
+        visited.add(current_url)
+        pages_crawled += 1
 
-            for link in all_links:
-                if is_same_domain(link, start_url) and link not in visited:
-                    next_to_visit.add(link)
+        if not soup:
+            continue
 
-        to_visit = next_to_visit
+        links = extract_all_links(soup, base_url)
 
-    logging.info("[*] Crawling completed. Found %d downloadable files.", len(all_download_links))
-    return all_download_links
+        # download detection
+        for item in filter_download_links(links):
+            if item["url"] not in seen_download_urls:
+                downloads.append(item)
+                seen_download_urls.add(item["url"])
+
+        # enqueue next links
+        for link in links:
+            if (
+                link not in visited
+                and is_same_domain(link, start_url)
+            ):
+                queue.append((link, depth + 1))
+
+    logging.info(
+        "Crawling finished: %d pages, %d downloadable files found",
+        pages_crawled,
+        len(downloads)
+    )
+
+    return downloads
+
 
 def fetch_and_parse(target_url):
     """Downloads HTML content and parses it with BeautifulSoup."""
@@ -111,11 +115,11 @@ def fetch_and_parse(target_url):
 
     try:
         # 1. Execute HTTP Request
-        response = requests.get(target_url, timeout=10)
+        response = requests.get(target_url, timeout=10, headers=HEADERS, allow_redirects=True)
         response.raise_for_status()
 
     except requests.exceptions.RequestException as e:
-        print(f"[-] Connection or HTTP error: {e}")
+        logging.debug("HTTP request failed for %s: %s", target_url, e)
         return None, None
 
     # 2. HTML Parsing
@@ -125,7 +129,7 @@ def fetch_and_parse(target_url):
     # 3. Base domain extraction (normalization)
     parsed_url = urlparse(target_url)
     # Use scheme and netloc to form a reliable base URL
-    base_url = target_url
+    base_url = f"{parsed_url.scheme}://{parsed_url.netloc}"
 
     return soup, base_url
 
@@ -161,8 +165,6 @@ def deduplicate_downloads(downloads):
             unique.append(d)
             seen.add(d['url'])
     return unique
-
-MAX_PAGES = 100
 
 DOWNLOAD_EXTENSIONS = (
     '.pdf', '.zip', '.tar', '.gz', '.7z', '.rar',
@@ -239,7 +241,7 @@ def download_file(url, filename):
 
     r = None
     try:
-        r = requests.get(url, stream=True, timeout=30)
+        r = requests.get(url, stream=True, timeout=30, headers=HEADERS)
         r.raise_for_status()
         total_size = int(r.headers.get('content-length') or 0)
 
@@ -299,18 +301,21 @@ def main():
                 print("[-] Depth must be positive.")
             except ValueError:
                 print("[-] Invalid input. Enter a number.")
-        print(f"[*] Starting crawler at: {target_url} (Max Depth: {max_depth})")
 
-        all_downloads = start_crawler(target_url, max_depth=max_depth)
-        all_downloads = deduplicate_downloads(all_downloads)
+        while True:
+            try:
+                max_pages = int(input("Enter max pages to crawl (default 100): ").strip() or "100")
+                if max_pages > 0:
+                    break
+                print("[-] Pages must be positive.")
+            except ValueError:
+                print("[-] Invalid input. Enter a number.")
+
+        print(f"[*] Starting crawler at: {target_url} (Max Depth: {max_depth}, Max Pages: {max_pages})")
+
+        all_downloads = start_crawler(target_url, max_depth=max_depth, max_pages=max_pages)
 
         if all_downloads:
-            # compact summary
-            print("\nCompact results:")
-            print("[No.]  FILE NAME\n")
-            for i, d in enumerate(all_downloads, start=1):
-                print(f"[{i:2}]  {d['name']}")
-
             selected_item = present_cli_menu(all_downloads)
 
             if selected_item:
@@ -336,11 +341,6 @@ def main():
     final_download_list = deduplicate_downloads(final_download_list)
 
     if final_download_list:
-        print("\nCompact results:")
-        print("[No.]  FILE NAME")
-        for i, d in enumerate(final_download_list, start=1):
-            print(f"[{i:2}]  {d['name']}")
-
         selected_item = present_cli_menu(final_download_list)
 
         if selected_item:
@@ -349,9 +349,18 @@ def main():
         print("\n[-] No download files found with defined extensions.")
 
 if __name__ == '__main__':
+
+    
     # ensure dependencies before running
     check_and_install_dependencies()
 
+    import requests
+    import re
+    from tqdm import tqdm 
+    from collections import deque
+    from bs4 import BeautifulSoup, XMLParsedAsHTMLWarning
+    from urllib.parse import urljoin, urlparse
+    warnings.filterwarnings("ignore", category=XMLParsedAsHTMLWarning)
     # ask for logging level
     print("\nLogging level: (q)uiet, (n)ormal, (v)erbose? [n]: ", end='')
     log_choice = input().strip().lower() or 'n'
