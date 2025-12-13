@@ -1,10 +1,6 @@
-import requests
 import os 
 import subprocess
 import sys
-from tqdm import tqdm 
-from bs4 import BeautifulSoup
-from urllib.parse import urljoin, urlparse
 
 def check_and_install_dependencies():
     REQUIRED_PACKAGES = {
@@ -41,6 +37,15 @@ def check_and_install_dependencies():
     except FileNotFoundError:
         print("[-] 'pip' command not found. Ensure python and pip are configured correctly.")
         sys.exit(1)
+
+# Check and install dependencies BEFORE importing optional packages
+check_and_install_dependencies()
+
+# Now import the packages that were just checked/installed
+import requests
+from tqdm import tqdm 
+from bs4 import BeautifulSoup
+from urllib.parse import urljoin, urlparse
 
 def fetch_and_parse(target_url):
     """Downloads HTML content and parses it with BeautifulSoup."""
@@ -193,8 +198,6 @@ def download_file(url, filename):
         print(f"\n[-] Generic error: {e}")
         
 def main():
-
-    check_and_install_dependencies()
 
     print("\n" + "="*70)
     print("           CLI RECONNAISSANCE AND DOWNLOAD TOOL")
