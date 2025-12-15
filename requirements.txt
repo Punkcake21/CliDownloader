@@ -1,3 +1,6 @@
 requests
 beautifulsoup4
 tqdm
+lxml
+logging
+fake_useragent
