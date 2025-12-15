@@ -8,7 +8,8 @@ def check_and_install_dependencies():
     REQUIRED_PACKAGES = {
         "requests": "requests",
         "bs4": "beautifulsoup4",
-        "tqdm": "tqdm"
+        "tqdm": "tqdm",
+        "fake_useragent": "fake_useragent"
     }
 
     missing_packages = []
@@ -41,9 +42,8 @@ def check_and_install_dependencies():
         sys.exit(1)
 
 
-HEADERS = {
-    "User-Agent": "Mozilla/5.0 (ReconCrawler/1.0)"
-}
+global HEADERS
+HEADERS = {}
 
 def is_same_domain(url1, url2):
     d1 = urlparse(url1).netloc.lower().lstrip("www.")
@@ -60,39 +60,44 @@ def start_crawler(start_url, max_depth=2, max_pages=100):
 
     pages_crawled = 0
 
-    while queue and pages_crawled < max_pages:
-        current_url, depth = queue.popleft()
+    try:
+        while queue and pages_crawled < max_pages:
+            current_url, depth = queue.popleft()
 
-        if current_url in visited:
-            continue
+            if current_url in visited:
+                continue
 
-        if depth > max_depth:
-            continue
+            if depth > max_depth:
+                continue
 
-        logging.info("Crawling (%d/%d): %s", pages_crawled + 1, max_pages, current_url)
+            logging.info("Crawling (%d/%d): %s", pages_crawled + 1, max_pages, current_url)
 
-        soup, base_url = fetch_and_parse(current_url)
-        visited.add(current_url)
-        pages_crawled += 1
+            soup, base_url = fetch_and_parse(current_url)
+            visited.add(current_url)
+            pages_crawled += 1
 
-        if not soup:
-            continue
+            if not soup:
+                continue
 
-        links = extract_all_links(soup, base_url)
+            links = extract_all_links(soup, base_url)
 
-        # download detection
-        for item in filter_download_links(links):
-            if item["url"] not in seen_download_urls:
-                downloads.append(item)
-                seen_download_urls.add(item["url"])
+            # download detection (fast mode: no HEAD/GET checks)
+            for item in filter_download_links(links, deep_check=False):
+                if item["url"] not in seen_download_urls:
+                    downloads.append(item)
+                    seen_download_urls.add(item["url"])
 
-        # enqueue next links
-        for link in links:
-            if (
-                link not in visited
-                and is_same_domain(link, start_url)
-            ):
-                queue.append((link, depth + 1))
+            # enqueue next links
+            for link in links:
+                if (
+                    link not in visited
+                    and is_same_domain(link, start_url)
+                ):
+                    queue.append((link, depth + 1))
+
+    except KeyboardInterrupt:
+        print(f"\n\n[!] Crawling interrupted by user (CTRL+C).")
+        logging.info("Crawling interrupted. Processed %d pages, found %d files.", pages_crawled, len(downloads))
 
     logging.info(
         "Crawling finished: %d pages, %d downloadable files found",
@@ -115,7 +120,7 @@ def fetch_and_parse(target_url):
 
     try:
         # 1. Execute HTTP Request
-        response = requests.get(target_url, timeout=10, headers=HEADERS, allow_redirects=True)
+        response = requests.get(target_url, timeout=1, headers=HEADERS, allow_redirects=True)
         response.raise_for_status()
 
     except requests.exceptions.RequestException as e:
@@ -174,21 +179,119 @@ DOWNLOAD_EXTENSIONS = (
     '.csv', '.xml', '.json', '.deb', '.rpm'
 )
 
-def filter_download_links(all_links):
+def _get_filename_from_content_disposition(headers):
+    cd = headers.get('content-disposition')
+    if not cd:
+        return None
+
+    import re
+    m = re.search(r"filename\*=[^']*''(?P<name>[^;]+)", cd)
+    if m:
+        try:
+            return unquote(m.group('name'))
+        except Exception:
+            return m.group('name')
+
+    m = re.search(r'filename="(?P<name>[^"]+)"', cd)
+    if m:
+        return m.group('name')
+
+    m = re.search(r'filename=(?P<name>[^;]+)', cd)
+    if m:
+        return m.group('name').strip(' \"')
+
+    return None
+
+
+def filter_download_links(all_links, session=None, head_timeout=1, deep_check=False):
+   
     download_list = []
+    sess = session or requests.Session()
 
     for url in all_links:
-        if url.lower().endswith(DOWNLOAD_EXTENSIONS):
+        try:
             parsed_url = urlparse(url)
-            file_name = parsed_url.path.split('/')[-1]
+            path = unquote(parsed_url.path or '')
+            file_name = os.path.basename(path)
+            ext = os.path.splitext(file_name)[1].lower()
 
-            if not file_name:
+            # 1) direct extension in path
+            if file_name and ext in DOWNLOAD_EXTENSIONS:
+                download_list.append({'name': file_name, 'url': url})
                 continue
 
-            download_list.append({
-                'name' : file_name,
-                'url' : url
-            })
+            # 2) query params like ?file=..., ?filename=...
+            qs = parse_qs(parsed_url.query or '')
+            found_in_query = False
+            for key in ('file', 'filename', 'download', 'name', 'attachment'):
+                if key in qs and qs[key]:
+                    candidate = unquote(qs[key][-1])
+                    if os.path.splitext(candidate)[1].lower() in DOWNLOAD_EXTENSIONS:
+                        download_list.append({'name': os.path.basename(candidate), 'url': url})
+                        found_in_query = True
+                        break
+
+            if found_in_query:
+                continue
+
+            # 3) deep check: HEAD/GET request to inspect headers (optional, slow)
+            if not deep_check:
+                continue
+
+            try:
+                resp = sess.head(url, allow_redirects=True, timeout=head_timeout, headers=HEADERS)
+            except requests.RequestException:
+                resp = None
+
+            # If HEAD not informative, try lightweight GET
+            if resp is None or resp.status_code >= 400 or 'content-disposition' not in (k.lower() for k in resp.headers):
+                try:
+                    resp = sess.get(url, stream=True, allow_redirects=True, timeout=head_timeout, headers=HEADERS)
+                except requests.RequestException:
+                    resp = None
+
+            if resp is None:
+                continue
+
+            # prefer filename from Content-Disposition
+            fname = _get_filename_from_content_disposition(resp.headers)
+            final_url = resp.url
+
+            if not fname:
+                final_path = unquote(urlparse(final_url).path or '')
+                fname = os.path.basename(final_path)
+
+            if not fname:
+                continue
+
+            fext = os.path.splitext(fname)[1].lower()
+            if fext in DOWNLOAD_EXTENSIONS:
+                download_list.append({'name': fname, 'url': final_url})
+                continue
+
+            # 4) check Content-Type for common downloadable types
+            ctype = resp.headers.get('content-type', '').split(';')[0].lower()
+            ctype_map = {
+                'application/pdf': '.pdf',
+                'application/zip': '.zip',
+                'application/x-gzip': '.gz',
+                'application/x-7z-compressed': '.7z',
+                'application/vnd.rar': '.rar',
+                'application/octet-stream': '',
+                'application/vnd.android.package-archive': '.apk',
+            }
+
+            if ctype in ctype_map:
+                if not fext and ctype_map[ctype]:
+                    fname = fname + ctype_map[ctype]
+
+                download_list.append({'name': fname, 'url': final_url})
+
+        except StopIteration:
+            continue
+        except Exception:
+            logging.debug("Error processing URL: %s, %s", url, e)
+
     logging.debug("Found %d downloadable files after filtering.", len(download_list))
     return download_list
 
@@ -230,7 +333,7 @@ def present_cli_menu(download_list):
             print("[-] Unrecognized input. Enter a number, 'r' or 'q'.")
 
 def download_file(url, filename):
-    # Sanitize filename: remove invalid characters and get basename
+    
     filename = re.sub(r'[^\w\s.-]', '_', filename)
     filename = os.path.basename(filename)
     
@@ -241,7 +344,7 @@ def download_file(url, filename):
 
     r = None
     try:
-        r = requests.get(url, stream=True, timeout=30, headers=HEADERS)
+        r = requests.get(url, stream=True, timeout=1, headers=HEADERS)
         r.raise_for_status()
         total_size = int(r.headers.get('content-length') or 0)
 
@@ -337,7 +440,7 @@ def main():
         return
 
     raw_links = extract_all_links(soup, base_url)
-    final_download_list = filter_download_links(raw_links)
+    final_download_list = filter_download_links(raw_links, deep_check=True)
     final_download_list = deduplicate_downloads(final_download_list)
 
     if final_download_list:
@@ -357,10 +460,32 @@ if __name__ == '__main__':
     import requests
     import re
     from tqdm import tqdm 
+    from fake_useragent import UserAgent
     from collections import deque
     from bs4 import BeautifulSoup, XMLParsedAsHTMLWarning
-    from urllib.parse import urljoin, urlparse
+    from urllib.parse import urljoin, urlparse, unquote, parse_qs
     warnings.filterwarnings("ignore", category=XMLParsedAsHTMLWarning)
+
+    try:
+        ua_obj = UserAgent(os='random')
+
+        HEADERS = {
+            'User-Agent': ua_obj.random,
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.5',
+            'Connection': 'keep-alive',
+        }
+        print(f"[*] Using User-Agent: {HEADERS['User-Agent'][:60]}...")
+
+    except Exception as e:
+        print(f"[-] Error generating User-Agent: {e}")
+        HEADERS={
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:104.0) Gecko/20100101 Firefox/104.0',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.5',
+            'Connection': 'keep-alive',
+        }
+
     # ask for logging level
     print("\nLogging level: (q)uiet, (n)ormal, (v)erbose? [n]: ", end='')
     log_choice = input().strip().lower() or 'n'
