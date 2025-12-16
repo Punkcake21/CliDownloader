@@ -90,9 +90,9 @@ Enter file No. to download, 'r' to refresh list, 'n' for new URL, 'q' to quit:
 .
 ├── CliDownloader.py        # Main application script
 ├── extensions.txt          # CONFIG FILE (You must create this)
-└── [Downloaded Files]      # Files are saved to the current folder
+└── /Downloads              # Files are saved in this folder
 ```
 
 ## ⚠️ Disclaimer
 
-This tool is intended for educational purposes and legitimate reconnaissance (e.g., analyzing your own websites, CTF challenges, or authorized testing). The author is not responsible for any misuse or violation of terms of service of third-party websites. Always ensure you have permission before crawling or downloading data from external domains.
+This tool is intended for educational purposes and legitimate reconnaissance. The author is not responsible for any misuse or violation of terms of service of third-party websites. Always ensure you have permission before crawling or downloading data from external domains. 
