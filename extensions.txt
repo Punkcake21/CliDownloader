@@ -24,3 +24,6 @@
 .json
 .deb
 .rpm
+.py
+.md
+.txt
