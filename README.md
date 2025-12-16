@@ -29,24 +29,17 @@ The script will attempt to automatically install the following libraries if they
 ## ⚙️ Installation & Setup
 
 1. **Clone or Download** the script to your local machine.
-2. **Create the Extensions File (Required)**: The program looks for a file named `extensions.txt` in the same directory to determine which file types to hunt for. Create this file and list the extensions you want to find (one per line).
-
-   Example `extensions.txt`:
-   ```text
-   .pdf
-   .zip
-   .csv
-   .xlsx
-   .docx
-   .jpg
-   .png
-   .exe
+   ```bash
+   git clone https://github.com/Punkcake21/CliDownloader
    ```
-
+   ```bash
+   cd CliDownloader
+   ```
 3. **Run the script**:
    ```bash
    python CliDownloader.py
    ```
+4. **(OPTIONAL) Modify the `extensions.txt` file to your liking**
 
 ## 💻 Usage
 
