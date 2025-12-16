@@ -336,7 +336,11 @@ def download_file(url, filename):
     filename = re.sub(r'[^\w\s.-]', '_', filename)
     filename = os.path.basename(filename)
     
-    save_path = os.path.join(os.getcwd(), filename)
+    download_dir = os.path.join(os.getcwd(), 'downloads')
+    if not os.path.exists(download_dir):
+        os.makedirs(download_dir)
+
+    save_path = os.path.join(download_dir, filename)
 
     print(f"\n[*] Starting download: '{filename}'")
     print(f"[*] URL: {url}")
