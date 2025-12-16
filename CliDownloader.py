@@ -307,12 +307,15 @@ def present_cli_menu(download_list):
 
         try:
             user_input = input(
-                "Enter file No. to download, 'r' to refresh list, 'q' to quit:" 
+                "Enter file No. to download, 'r' to refresh list, 'n' for new URL, 'q' to quit:" 
             ).strip().lower()
 
             if user_input == 'q':
                 print("[*] Exiting program.")
                 return None
+
+            if user_input == 'n':
+                return 'NEW_URL'
 
             if user_input == 'r':
                 print("--- REFRESH LIST ---")
@@ -383,69 +386,92 @@ def main():
     print("           CLI RECONNAISSANCE AND DOWNLOAD TOOL")
     print("="*70)
 
-    print("\n[*] start crawler? (y/n): ", end='')
-    choice = input().strip().lower()
-    if choice == 'y':
-        target_url = input("Enter the starting URL for crawling: ").strip()
+    while True:
+        print("\n[*] start crawler? (y/n) or 'q' to quit: ", end='')
+        choice = input().strip().lower()
+
+        if choice == 'q':
+            break
+
+        if choice == 'y':
+            target_url = input("Enter the starting URL for crawling: ").strip()
+
+            if not target_url:
+                print("[-] URL not provided.")
+                continue
+
+            while True:
+                try:
+                    max_depth = int(input("Enter crawler max depth (default 2): ").strip() or "2")
+                    if max_depth > 0:
+                        break
+                    print("[-] Depth must be positive.")
+                except ValueError:
+                    print("[-] Invalid input. Enter a number.")
+
+            while True:
+                try:
+                    max_pages = int(input("Enter max pages to crawl (default 100): ").strip() or "100")
+                    if max_pages > 0:
+                        break
+                    print("[-] Pages must be positive.")
+                except ValueError:
+                    print("[-] Invalid input. Enter a number.")
+
+            print(f"[*] Starting crawler at: {target_url} (Max Depth: {max_depth}, Max Pages: {max_pages})")
+
+            all_downloads = start_crawler(target_url, max_depth=max_depth, max_pages=max_pages)
+
+            if all_downloads:
+                while True:
+                    selected_item = present_cli_menu(all_downloads)
+
+                    if selected_item == 'NEW_URL':
+                        break
+
+                    if selected_item is None:
+                        return
+
+                    download_file(selected_item['url'], selected_item['name'])
+                
+                if selected_item == 'NEW_URL':
+                    continue
+            else:
+                print("\n[-] No download files found during crawling.")
+            
+            continue
+
+        target_url = input("Enter the web page URL to analyze: ").strip()
 
         if not target_url:
-            print("[-] URL not provided. Exiting.")
-            return
+            print("[-] URL not provided.")
+            continue
 
-        while True:
-            try:
-                max_depth = int(input("Enter crawler max depth (default 2): ").strip() or "2")
-                if max_depth > 0:
+        soup, base_url = fetch_and_parse(target_url)
+
+        if not soup:
+            continue
+
+        raw_links = extract_all_links(soup, base_url)
+        final_download_list = filter_download_links(raw_links, deep_check=True)
+        final_download_list = deduplicate_downloads(final_download_list)
+
+        if final_download_list:
+            while True:
+                selected_item = present_cli_menu(final_download_list)
+
+                if selected_item == 'NEW_URL':
                     break
-                print("[-] Depth must be positive.")
-            except ValueError:
-                print("[-] Invalid input. Enter a number.")
 
-        while True:
-            try:
-                max_pages = int(input("Enter max pages to crawl (default 100): ").strip() or "100")
-                if max_pages > 0:
-                    break
-                print("[-] Pages must be positive.")
-            except ValueError:
-                print("[-] Invalid input. Enter a number.")
+                if selected_item is None:
+                    return
 
-        print(f"[*] Starting crawler at: {target_url} (Max Depth: {max_depth}, Max Pages: {max_pages})")
-
-        all_downloads = start_crawler(target_url, max_depth=max_depth, max_pages=max_pages)
-
-        if all_downloads:
-            selected_item = present_cli_menu(all_downloads)
-
-            if selected_item:
                 download_file(selected_item['url'], selected_item['name'])
+            
+            if selected_item == 'NEW_URL':
+                continue
         else:
-            print("\n[-] No download files found during crawling.")
-
-        return
-
-    target_url = input("Enter the web page URL to analyze: ").strip()
-
-    if not target_url:
-        print("[-] URL not provided. Exiting.")
-        return
-
-    soup, base_url = fetch_and_parse(target_url)
-
-    if not soup:
-        return
-
-    raw_links = extract_all_links(soup, base_url)
-    final_download_list = filter_download_links(raw_links, deep_check=True)
-    final_download_list = deduplicate_downloads(final_download_list)
-
-    if final_download_list:
-        selected_item = present_cli_menu(final_download_list)
-
-        if selected_item:
-            download_file(selected_item['url'], selected_item['name'])
-    else:
-        print("\n[-] No download files found with defined extensions.")
+            print("\n[-] No download files found with defined extensions.")
 
 if __name__ == '__main__':
 
@@ -463,7 +489,7 @@ if __name__ == '__main__':
     warnings.filterwarnings("ignore", category=XMLParsedAsHTMLWarning)
 
     try:
-        ua_obj = UserAgent(os='random')
+        ua_obj = UserAgent()
 
         HEADERS = {
             'User-Agent': ua_obj.random,
