@@ -172,11 +172,7 @@ def deduplicate_downloads(downloads):
     return unique
 
 DOWNLOAD_EXTENSIONS = (
-    '.pdf', '.zip', '.tar', '.gz', '.7z', '.rar',
-    '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx',
-    '.mp3', '.mp4', '.avi', '.mov', '.ogg',
-    '.iso', '.exe', '.dmg', '.apk',
-    '.csv', '.xml', '.json', '.deb', '.rpm'
+    tuple(line.strip() for line in open('extensions.txt').read().split('\n') if line.strip())
 )
 
 def _get_filename_from_content_disposition(headers):
