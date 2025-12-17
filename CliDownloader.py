@@ -4,6 +4,66 @@ import sys
 import logging
 import warnings
 
+##CONFIGURATION
+REPO_OWNER = "Punkcake21"
+REPO_NAME = "CliDownloader"
+FILE_PATH = "CliDownloader.py"
+GITHUB_API_URL = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/commits/main"
+GITHUB_RAW_URL = f"https://raw.githubusercontent.com/{REPO_OWNER}/{REPO_NAME}/main/{FILE_PATH}"
+VERSION_FILE = "last_commit.txt"
+
+def get_latest_commit_sha():
+    try:
+        response = requests.get(GITHUB_API_URL, timeout=10)
+        response.raise_for_status()
+        return response.json()['sha']
+    except Exception as e:
+        print(f"Error in update control: {e}")
+        return None
+    
+def update_and_restart(new_sha):
+    print("Updating...")
+    try:
+        response = requests.git(GITHUB_RAW_URL, stream=True)
+        response.raise_for_status()
+
+        total_size = int(response.headers.get('content-lenght', 0))
+        block_size = 1024 
+
+        with open(FILE_PATH, "wb", encoding="uft-8") as f, tqdm(
+            desc="Downloading new version",
+            total=total_size,
+            unit='iB',
+            unit_scale=True,
+            unit_divisor=1024,
+        )as bar:
+            for data in response.iter_content(block_size):
+                f.write(data)
+                bar.update(len(data))
+        
+
+        with open(VERSION_FILE, "w") as f:
+            f.write(new_sha)
+
+        print("Done Updating. Rebooting now...")
+        os.execv(sys.executable, ['python'] + sys.argv)
+    except Exception as e:
+        print(f"Error during updating: {e}")
+
+def check_for_updates():
+    local_sha = ""
+    if os.path.exists(VERSION_FILE):
+        with open(VERSION_FILE, "r") as f:
+            local_sha = f.read().strip()
+
+    remote_sha = get_latest_commit_sha()
+
+    if remote_sha and remote_sha != local_sha:
+        update_and_restart(remote_sha)
+    else:
+        print("The script is alredy Up-to-date")
+
+
 def check_and_install_dependencies():
     REQUIRED_PACKAGES = {
         "requests": "requests",
@@ -479,7 +539,9 @@ def main():
 
 if __name__ == '__main__':
 
-    
+    # check for newer versions and autoinstall
+    check_for_updates()
+
     # ensure dependencies before running
     check_and_install_dependencies()
 
