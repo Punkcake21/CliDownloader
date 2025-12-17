@@ -24,13 +24,13 @@ def get_latest_commit_sha():
 def update_and_restart(new_sha):
     print("Updating...")
     try:
-        response = requests.git(GITHUB_RAW_URL, stream=True)
+        response = requests.get(GITHUB_RAW_URL, stream=True)
         response.raise_for_status()
 
-        total_size = int(response.headers.get('content-lenght', 0))
+        total_size = int(response.headers.get('content-length', 0))
         block_size = 1024 
 
-        with open(FILE_PATH, "wb", encoding="uft-8") as f, tqdm(
+        with open(FILE_PATH, "wb") as f, tqdm(
             desc="Downloading new version",
             total=total_size,
             unit='iB',
@@ -539,9 +539,6 @@ def main():
 
 if __name__ == '__main__':
 
-    # check for newer versions and autoinstall
-    check_for_updates()
-
     # ensure dependencies before running
     check_and_install_dependencies()
 
@@ -553,6 +550,9 @@ if __name__ == '__main__':
     from bs4 import BeautifulSoup, XMLParsedAsHTMLWarning
     from urllib.parse import urljoin, urlparse, unquote, parse_qs
     warnings.filterwarnings("ignore", category=XMLParsedAsHTMLWarning)
+
+    # check for newer versions and autoinstall
+    check_for_updates()
 
     try:
         ua_obj = UserAgent()
