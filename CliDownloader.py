@@ -15,6 +15,8 @@ try:
 except ImportError:
     pass
 
+warnings.filterwarnings("ignore", category=XMLParsedAsHTMLWarning)
+
 ##CONFIGURATION
 REPO_OWNER = "Punkcake21"
 REPO_NAME = "CliDownloader"
@@ -552,8 +554,6 @@ if __name__ == '__main__':
 
     # ensure dependencies before running
     check_and_install_dependencies()
-
-    warnings.filterwarnings("ignore", category=XMLParsedAsHTMLWarning)
 
     # check for newer versions and autoinstall
     check_for_updates()
