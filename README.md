@@ -89,7 +89,7 @@ Enter file No. to download, 'r' to refresh list, 'n' for new URL, 'q' to quit:
 ```text
 .
 ├── CliDownloader.py        # Main application script
-├── extensions.txt          # CONFIG FILE (You must create this)
+├── extensions.txt          # CONFIG FILE
 └── /Downloads              # Files are saved in this folder
 ```
 
