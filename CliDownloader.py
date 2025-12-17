@@ -4,6 +4,18 @@ import sys
 import logging
 import warnings
 
+try:
+    import requests
+    import re
+    from tqdm import tqdm 
+    from fake_useragent import UserAgent
+    from collections import deque
+    from bs4 import BeautifulSoup, XMLParsedAsHTMLWarning
+    from urllib.parse import urljoin, urlparse, unquote, parse_qs
+except ImportError:
+    print("[-] Missing dependencies. Please run the script again to install them.")
+    sys.exit(1)
+
 ##CONFIGURATION
 REPO_OWNER = "Punkcake21"
 REPO_NAME = "CliDownloader"
@@ -542,13 +554,6 @@ if __name__ == '__main__':
     # ensure dependencies before running
     check_and_install_dependencies()
 
-    import requests
-    import re
-    from tqdm import tqdm 
-    from fake_useragent import UserAgent
-    from collections import deque
-    from bs4 import BeautifulSoup, XMLParsedAsHTMLWarning
-    from urllib.parse import urljoin, urlparse, unquote, parse_qs
     warnings.filterwarnings("ignore", category=XMLParsedAsHTMLWarning)
 
     # check for newer versions and autoinstall
