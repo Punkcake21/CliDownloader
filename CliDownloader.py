@@ -13,8 +13,7 @@ try:
     from bs4 import BeautifulSoup, XMLParsedAsHTMLWarning
     from urllib.parse import urljoin, urlparse, unquote, parse_qs
 except ImportError:
-    print("[-] Missing dependencies. Please run the script again to install them.")
-    sys.exit(1)
+    pass
 
 ##CONFIGURATION
 REPO_OWNER = "Punkcake21"
