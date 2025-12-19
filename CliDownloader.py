@@ -59,6 +59,7 @@ def update_and_restart(new_sha):
 
         print("Done Updating. Rebooting now...")
         os.execv(sys.executable, ['python'] + sys.argv)
+        os.remove(VERSION_FILE) if os.path.exists(VERSION_FILE) else None
     except Exception as e:
         print(f"Error during updating: {e}")
 
@@ -74,6 +75,7 @@ def check_for_updates():
         update_and_restart(remote_sha)
     else:
         print("The script is alredy Up-to-date")
+        os.remove(VERSION_FILE) if os.path.exists(VERSION_FILE) else None
 
 
 def check_and_install_dependencies():
