@@ -596,8 +596,12 @@ if __name__ == '__main__':
         level = logging.WARNING
     elif log_choice == 'v':
         level = logging.DEBUG
-    else:
+    elif log_choice == 'n':
         level = logging.INFO
+    else:
+        print("[-] Unrecognized choice, defaulting to normal.")
+        level = logging.INFO
+        sys.sleep(2.5)
 
     logging.basicConfig(level=level, format='[%(levelname)s] %(message)s')
 
