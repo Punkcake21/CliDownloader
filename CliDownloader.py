@@ -3,6 +3,7 @@ import subprocess
 import sys
 import logging
 import warnings
+import time
 
 try:
     import requests
@@ -601,7 +602,7 @@ if __name__ == '__main__':
     else:
         print("[-] Unrecognized choice, defaulting to normal.")
         level = logging.INFO
-        sys.sleep(2.5)
+        time.sleep(2.5)
 
     logging.basicConfig(level=level, format='[%(levelname)s] %(message)s')
 
