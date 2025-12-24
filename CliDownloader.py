@@ -360,7 +360,7 @@ def filter_download_links(all_links, session=None, head_timeout=1, deep_check=Fa
 
         except StopIteration:
             continue
-        except Exception:
+        except Exception as e:
             logging.debug("Error processing URL: %s, %s", url, e)
 
     logging.debug("Found %d downloadable files after filtering.", len(download_list))
